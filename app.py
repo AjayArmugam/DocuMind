@@ -16,74 +16,132 @@ db = None
 def process_pdf(file):
     global db
 
-    doc = fitz.open(file.name)
-    text = ""
+    try:
+        if file is None:
+            return "⚠️ Please upload a PDF first."
 
-    for i, page in enumerate(doc[:50]):
-        page_text = page.get_text()
+        # 🔥 HANDLE BOTH CASES (HF + Local)
+        if hasattr(file, "name"):
+            doc = fitz.open(file.name)
+        else:
+            doc = fitz.open(file)
 
-        if len(page_text.strip()) < 50:
-            pix = page.get_pixmap()
-            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
-                pix.height, pix.width, pix.n
-            )
-            result = reader.readtext(img)
-            page_text = " ".join([r[1] for r in result])
+        text = ""
 
-        text += page_text + "\n"
+        for i, page in enumerate(doc[:50]):
+            page_text = page.get_text()
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=500,
-        chunk_overlap=100
-    )
-    chunks = splitter.split_text(text)
+            if len(page_text.strip()) < 50:
+                pix = page.get_pixmap()
+                img = np.frombuffer(
+                    pix.samples, dtype=np.uint8
+                ).reshape(pix.height, pix.width, pix.n)
 
-    embeddings = HuggingFaceEmbeddings()
-    db = FAISS.from_texts(chunks, embeddings)
+                result = reader.readtext(img)
+                page_text = " ".join([r[1] for r in result])
 
-    return "✅ PDF processed! Ask your question now."
+            text += page_text + "\n"
 
+        if not text.strip():
+            return "⚠️ No text found in PDF."
+
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=500,
+            chunk_overlap=100
+        )
+        chunks = splitter.split_text(text)
+
+        if len(chunks) == 0:
+            return "⚠️ Failed to process text."
+
+        embeddings = HuggingFaceEmbeddings()
+        db = FAISS.from_texts(chunks, embeddings)
+
+        return "✅ PDF processed! Ask your question now."
+
+    except Exception as e:
+        print("PROCESS ERROR:", e)
+        return f"❌ Error processing PDF: {str(e)}"
+    
 
 # ===== ANSWER FUNCTION =====
 def get_answer(query):
     global db
 
-    if db is None:
-        return "⚠️ Upload and process a PDF first.", ""
+    try:
+        if db is None:
+            return "⚠️ Upload and process a PDF first.", ""
 
-    docs = db.similarity_search(query, k=3)
+        docs = db.similarity_search(query, k=3)
 
-    best_sentence = ""
-    best_score = 0
-    source = ""
+        best_sentence = ""
+        best_score = 0
+        source = ""
 
-    for doc in docs:
-        sentences = doc.page_content.split(".")
+        for doc in docs:
+            sentences = doc.page_content.split(".")
 
-        for sent in sentences:
-            sent_clean = sent.strip()
+            for sent in sentences:
+                sent_clean = sent.strip()
 
-            if len(sent_clean) < 20:
-                continue
+                if len(sent_clean) < 20:
+                    continue
 
-            score = fuzz.partial_ratio(query.lower(), sent_clean.lower())
+                score = fuzz.partial_ratio(query.lower(), sent_clean.lower())
 
-            if "is" in sent_clean.lower() or "mode" in sent_clean.lower():
-                score += 10
+                # boost definition-like lines
+                if "is" in sent_clean.lower() or "mode" in sent_clean.lower():
+                    score += 10
 
-            if score > best_score:
-                best_score = score
-                best_sentence = sent_clean
-                source = doc.page_content[:200]
+                if score > best_score:
+                    best_score = score
+                    best_sentence = sent_clean
+                    source = doc.page_content[:200]
 
-    return best_sentence, source
+        # 🔥 FIX: never return empty
+        if not best_sentence:
+            best_sentence = "❌ No relevant answer found."
+
+        if not source:
+            source = "No source available."
+
+        return best_sentence, source
+
+    except Exception as e:
+        print("ANSWER ERROR:", e)
+        return "⚠️ Error while generating answer.", ""
 
 
 # ===== CHAT =====
 def chat(user_input, history):
-    answer, source = get_answer(user_input)
-    history.append((user_input, answer + "\n\n📌 Source: " + source))
-    return "", history
+    try:
+        if not user_input.strip():
+            return "", history
+
+        answer, source = get_answer(user_input)
+
+        if not answer:
+            answer = "❌ No answer found."
+
+        if not source:
+            source = "No source available."
+
+        # ✅ NEW FORMAT (VERY IMPORTANT)
+        history.append({"role": "user", "content": user_input})
+        history.append({
+            "role": "assistant",
+            "content": answer + "\n\n📌 Source: " + source
+        })
+
+        return "", history
+
+    except Exception as e:
+        print("CHAT ERROR:", e)
+        history.append({
+            "role": "assistant",
+            "content": "⚠️ Something went wrong."
+        })
+        return "", history
 
 
 # ===== FEEDBACK =====
