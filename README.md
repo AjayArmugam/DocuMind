@@ -5,12 +5,12 @@ DocuMind is an AI-based application that allows users to upload PDF documents an
 ---
 
 ## 🌐 Live Demo
-🔗 https://yourname-documind.hf.space
+🔗 https://huggingface.co/spaces/AjayArmugam/DocuMind
 
 ---
 
 ## 📓 Google Colab (Development)
-🔗 https://colab.research.google.com/drive/YOUR_NOTEBOOK_LINK
+🔗 https://colab.research.google.com/drive/1JM_KqXbKPf_ola4XUWhlSOR7idW4q4cL?usp=sharing
 
 ---
 
@@ -36,14 +36,7 @@ DocuMind is an AI-based application that allows users to upload PDF documents an
 
 ---
 
-## 📸 Screenshots
+DocuMind is an AI-powered document question-answering system that enables users to upload PDFs and interact with them through a chatbot interface.
 
-_Add your app screenshots here_
+The system combines OCR (for extracting printed and handwritten text) with Retrieval-Augmented Generation (RAG) using FAISS to perform semantic search and return accurate, context-based answers from the document.
 
----
-
-## ⚙️ How to Run Locally
-
-```bash
-pip install -r requirements.txt
-python app.py
